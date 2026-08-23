@@ -1,0 +1,28 @@
+[project]
+name = "githost-api"
+version = "1.0.0"
+description = "One stats API for every git host: Forgejo, Gitea, Codeberg, or any instance by base URL"
+readme = "readme.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.10.0",
+    "python-dotenv>=1.0.0",
+    "redis>=5.2.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "respx>=0.22.0",
+]
