@@ -26,9 +26,9 @@ uv run uvicorn main:app --reload --port 8008
 | Repos | `GET /{username}/repos` | with star/fork totals |
 | Orgs | `GET /{username}/orgs` | may be `restricted` without a token |
 
-Target selection: `?host=<registered-key>`, `?base_url=https://git.example.com`
-(SSRF-guarded), or the embed-safe prefix `/f/{host}/{username}/...`. Requests
-without an explicit host are rejected.
+Target selection: `?host=<registered-key-or-hostname>`,
+`?base_url=https://git.example.com` (SSRF-guarded), or the embed-safe prefix
+`/f/{host}/{username}/...`. Requests without an explicit host are rejected.
 
 Envelope additions over the canonical schema: `platform` reads `forgejo` or
 `gitea` from a live version probe, `instance` is the registry key (hostname for
@@ -49,4 +49,6 @@ Every Gitea-family heatmap endpoint caps at ~371 days server-side. Pass
   bookmark and resumes on the next call, flagged `complete: false`
 * heatmap blocks report `"source": "native" | "synthesized"`
 
-Design notes and the full evaluation live in dump 038 on dump.taf.sh.
+Design notes and the full evaluation live in
+[dump 038](https://dump.taf.sh/d/038_githoststats-one-api-every-git-host-plan/)
+on dump.taf.sh.
