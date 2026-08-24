@@ -193,6 +193,7 @@ _PLAYGROUND_CSS = """
 .pg-input{width:100%;background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r);padding:11px 34px 11px 38px;color:var(--ink);font-family:var(--mono);font-size:14px;outline:none;transition:border-color .15s,box-shadow .15s}
 .pg-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
 .pg-input.shake{animation:pg-shake .4s ease}
+#pg-host.shake{animation:pg-shake .4s ease}
 .pg-input-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:22px;height:22px;display:none;align-items:center;justify-content:center;border:0;border-radius:50%;background:transparent;color:var(--faint);font-size:16px;line-height:1;cursor:pointer;transition:.15s}
 .pg-input-clear:hover{background:var(--line);color:var(--ink)}
 .pg-input-wrap.has-value .pg-input-clear{display:flex}
@@ -402,6 +403,7 @@ _PLAYGROUND_JS = """
 
   function collectTargetParams(q){
     if(hostSel){
+      if(!hostSel.value){ return false; }
       if(hostSel.value === 'custom'){
         var b = (buInput && buInput.value || '').trim();
         if(!b){ return false; }
@@ -432,6 +434,14 @@ _PLAYGROUND_JS = """
     collectEpParams(ep, q);
     if(q.length) url += (url.indexOf('?') === -1 ? '?' : '&') + q.join('&');
     return url;
+  }
+
+  function nudgeHost(){
+    if(!hostSel){ return; }
+    hostSel.classList.remove('shake');
+    void hostSel.offsetWidth;
+    hostSel.classList.add('shake');
+    hostSel.focus();
   }
 
   function isPlainObject(v){ return v !== null && typeof v === 'object' && !Array.isArray(v); }
@@ -532,7 +542,8 @@ _PLAYGROUND_JS = """
     if(hasParam && !value){ input.focus(); return Promise.resolve(); }
     var url = buildUrl(tmpl, value, ep);
     if(url === null){
-      input.focus();
+      if(hostSel && !hostSel.value){ nudgeHost(); }
+      else if(buInput && hostSel && hostSel.value === 'custom'){ buWrap.style.display = ''; buInput.focus(); }
       return Promise.resolve();
     }
     var status = ep.querySelector('.pg-status');
@@ -628,6 +639,10 @@ _PLAYGROUND_JS = """
       void input.offsetWidth;
       input.classList.add('shake');
       input.focus();
+      return;
+    }
+    if(hostSel && !hostSel.value){
+      nudgeHost();
       return;
     }
     if(hostSel && hostSel.value === 'custom' && !(buInput && buInput.value.trim())){
