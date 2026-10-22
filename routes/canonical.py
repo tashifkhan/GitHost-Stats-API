@@ -8,7 +8,7 @@ registered host in the path and is embed-safe for README badges.
 from collections.abc import AsyncIterator
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, Response
 
 from routes.dependencies import Context, prefixed_context, request_context
 from services.analytics import envelope
@@ -129,8 +129,10 @@ async def badges(
 
 
 @router.get("/{username}/repos", summary="Repositories with totals")
-async def repos(username: str, ctx: Context = Depends(_ctx)):
-    data = await ctx.analytics.get_repos_section(username)
+async def repos(response: Response, username: str, ctx: Context = Depends(_ctx)):
+    data = await ctx.analytics.get_repos_section(username, extra_emails=_emails(ctx))
+    if any(not repo.contributors_complete for repo in data.repos):
+        response.headers["Cache-Control"] = "no-store"
     return envelope(ctx.target, username, data)
 
 
@@ -205,8 +207,10 @@ async def badges_p(
 
 
 @router.get("/f/{host}/{username}/repos", include_in_schema=False)
-async def repos_p(username: str, ctx: Context = Depends(_ctx_prefixed)):
-    data = await ctx.analytics.get_repos_section(username)
+async def repos_p(response: Response, username: str, ctx: Context = Depends(_ctx_prefixed)):
+    data = await ctx.analytics.get_repos_section(username, extra_emails=_emails(ctx))
+    if any(not repo.contributors_complete for repo in data.repos):
+        response.headers["Cache-Control"] = "no-store"
     return envelope(ctx.target, username, data)
 
 

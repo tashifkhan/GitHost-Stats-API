@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Summary(BaseModel):
@@ -11,6 +11,14 @@ class Summary(BaseModel):
     totalStars: Optional[int] = None
     totalForks: Optional[int] = None
     followers: Optional[int] = None
+
+
+class RepoContributor(BaseModel):
+    login: Optional[str] = None
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    html_url: Optional[str] = None
+    contributions: int = 0
 
 
 class RepoSummary(BaseModel):
@@ -30,6 +38,8 @@ class RepoSummary(BaseModel):
     createdAt: Optional[str] = None
     updatedAt: Optional[str] = None
     pushedAt: Optional[str] = None
+    contributors: list[RepoContributor] = Field(default_factory=list)
+    contributors_complete: bool = False
 
 
 class Repos(BaseModel):
