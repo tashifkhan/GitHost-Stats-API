@@ -3,7 +3,7 @@
 The native heatmap endpoint caps server-side at ~371 days. This walker
 reconstructs full history by walking every owned repository's commits,
 filtering to the user's identity client-side (the API has no author param),
-and bucketing git author dates into UTC days.
+including Co-authored-by trailers, and bucketing git author dates into UTC days.
 
 Delta discipline: every request diffs first and fetches second. A Redis hash
 manifest keyed by ``repo.id`` stores ``{pushed_at, head_sha, oldest_sha,
@@ -16,18 +16,26 @@ request carries a wall-clock deadline budget.
 
 import asyncio
 import json
+import re
 from datetime import datetime, timezone
 
 from core.cache import delete_key, get_json, get_redis, redis_enabled, set_json
 from core.config import settings
 
 
+HISTORY_VERSION = "v2"
+_COAUTHOR_RE = re.compile(
+    r"^Co-authored-by:[ \t]*[^\r\n<>]+[ \t]*<([^<>\s]+@[^<>\s]+)>[ \t]*\r?$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def _manifest_key(instance: str, username: str) -> str:
-    return f"host:{instance}:histman:{username.lower()}"
+    return f"host:{instance}:histman:{HISTORY_VERSION}:{username.lower()}"
 
 
 def _hist_key(instance: str, username: str, repo_id: int | str) -> str:
-    return f"host:{instance}:hist:{username.lower()}:{repo_id}"
+    return f"host:{instance}:hist:{HISTORY_VERSION}:{username.lower()}:{repo_id}"
 
 
 def _matches_identity(commit: dict, username: str, emails: set[str]) -> bool:
@@ -36,11 +44,17 @@ def _matches_identity(commit: dict, username: str, emails: set[str]) -> bool:
     if uname and str(forge_user.get("login") or "").lower() == uname:
         return True
     git_author = (commit.get("commit") or {}).get("author") or {}
-    email = str(git_author.get("email") or "").strip().lower()
-    if email and email in emails:
-        return True
-    local = email.split("@", 1)[0] if email else ""
-    return bool(uname) and local == uname
+    message = str((commit.get("commit") or {}).get("message") or "")
+    candidates = [str(git_author.get("email") or ""), *_COAUTHOR_RE.findall(message)]
+    known_emails = {email.strip().lower() for email in emails}
+    for candidate in candidates:
+        email = candidate.strip().lower()
+        if email and email in known_emails:
+            return True
+        local = email.split("@", 1)[0] if email else ""
+        if uname and local == uname:
+            return True
+    return False
 
 
 def _day_of(commit: dict) -> str | None:

@@ -5,7 +5,7 @@ import respx
 
 from core.config import settings
 from services.client import HostClient
-from services.history import HistoryService
+from services.history import HistoryService, _matches_identity
 from services.registry import Target
 
 
@@ -255,3 +255,73 @@ async def test_deadline_stops_walk(monkeypatch):
         await service.client.aclose()
 
     assert outcome["status"] == "incomplete"
+
+
+@pytest.mark.parametrize("message,emails,expected", [
+    ("Shared work\n\nCo-authored-by: Someone <taf@noreply.example>", set(), True),
+    ("Shared work\r\n\r\nco-AUTHORED-by: Someone <Alias@Example.com>\r\n", {"alias@example.com"}, True),
+    ("Shared work\n\nCo-authored-by: Someone <alias@example.com>", {"ALIAS@EXAMPLE.COM"}, True),
+    ("Shared work\n\nCo-authored-by: Someone <other@example.com>", set(), False),
+    ("Mention Co-authored-by: Someone <taf@example.com>", set(), False),
+    ("Co-authored-by: taf", set(), False),
+    ("Co-authored-by: taf <other@example.com>", set(), False),
+])
+def test_coauthor_identity(message, emails, expected):
+    payload = commit("shared", login="someone")
+    payload["commit"]["message"] = message
+    assert _matches_identity(payload, "taf", emails) is expected
+
+
+@pytest.mark.parametrize("incremental", [False, True])
+async def test_walk_includes_coauthors_once(incremental):
+    coauthored = commit("new", login="someone")
+    coauthored["commit"]["message"] = (
+        "Shared work\n\nCo-authored-by: Developer <taf@noreply.example>\n"
+        "Co-authored-by: Developer <alias@example.com>"
+    )
+    primary = commit("old", login="taf")
+    primary["commit"]["message"] = "Own work\n\nCo-authored-by: Developer <alias@example.com>"
+    unrelated = commit("unrelated", login="someone")
+    entry = {"pushed_at": "old", "head_sha": "old", "oldest_sha": "unrelated", "complete": True}
+    with respx.mock(base_url="https://forge.test") as forge:
+        forge.get("/api/v1/repos/taf/dotfiles/commits").mock(
+            return_value=httpx.Response(200, json=[coauthored, primary, unrelated])
+        )
+        service = make_service()
+        outcome = await service._walk_repo(
+            repo=REPO, username="taf", emails={"alias@example.com"},
+            entry=entry if incremental else None, pushed_at="new", deadline=float("inf"),
+        )
+        await service.client.aclose()
+    assert outcome["status"] == ("append" if incremental else "replace")
+    assert outcome["days"] == {"2026-01-15": 1 if incremental else 2}
+
+
+async def test_deep_calendar_supplies_public_email_to_history(monkeypatch):
+    from services import analytics
+
+    service = analytics.AnalyticsService(None, Target(key="test", base_url="https://forge.test"))
+    captured = []
+
+    async def user(username):
+        return {"email": "public@example.com"}
+
+    async def repos(username):
+        return [REPO]
+
+    async def native(username):
+        return []
+
+    async def refresh(username, *, repos, extra_emails):
+        captured.append(extra_emails)
+        return {"days": {"2026-01-15": 1}, "complete": True, "repos": 1, "total_commits": 1}
+
+    monkeypatch.setattr(analytics, "redis_enabled", lambda: True)
+    monkeypatch.setattr(service, "get_user", user)
+    monkeypatch.setattr(service, "get_repos", repos)
+    monkeypatch.setattr(service, "get_native_heatmap", native)
+    monkeypatch.setattr(service.history, "refresh", refresh)
+
+    _, facts = await service._full_calendar("taf", deep=True, extra_emails={"alias@example.com"})
+    assert captured == [{"public@example.com", "alias@example.com"}]
+    assert facts["total_commits"] == 1
