@@ -23,7 +23,7 @@ uv run uvicorn main:app --reload --port 8008
 | Stats | `GET /{username}/stats` | language bars; `?exclude=Markdown,SVG` |
 | Heatmap | `GET /{username}/heatmap` | `view=all\|last_365\|year`, `year=2026`, `deep=true` |
 | Badges | `GET /{username}/badges` | derived achievements |
-| Repos | `GET /{username}/repos` | with star/fork totals |
+| Repos | `GET /{username}/repos` | star/fork totals and contributors, including co-authors |
 | Orgs | `GET /{username}/orgs` | may be `restricted` without a token |
 
 Target selection: `?host=<registered-key-or-hostname>`,
@@ -33,6 +33,29 @@ Target selection: `?host=<registered-key-or-hostname>`,
 Envelope additions over the canonical schema: `platform` reads `forgejo` or
 `gitea` from a live version probe, `instance` is the registry key (hostname for
 custom URLs), and `software` carries `{name, version}`.
+
+## Repository contributors
+
+Both `/{username}/repos?host=...` and `/f/{host}/{username}/repos` add a
+`contributors` list and `contributors_complete` to each repo. The list contains
+the top 10 contributors by authored plus co-authored commits on the default
+branch. Each commit counts once per contributor, including when an account
+appears as both the primary author and a `Co-authored-by` trailer.
+
+Each entry has `login`, `name`, `avatar_url`, `html_url`, and `contributions`.
+Linked commit authors supply account details. Matching commit emails merge
+co-author credit into those accounts, even if the linked author appears on a
+later page. The requested user's public email and `?emails=...` aliases also
+link their credit. If an email has no known account, the entry keeps its name
+and count with null account fields. The response does not expose commit emails.
+
+Scans share a request deadline and respect `GITHOST_HISTORY_MAX_PAGES`. Redis
+checkpoints pin the head commit and save the next page so later requests can
+continue. Changed repo timestamps start a fresh scan. `contributors_complete`
+is false until the scan finishes, and partial responses use `Cache-Control:
+no-store` so HTTP caching does not prevent progress. Redis must be configured
+to preserve progress between requests. Forks and mirrors include their full
+default-branch contributor history.
 
 ## Deep history
 

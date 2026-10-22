@@ -1,5 +1,6 @@
 """Section orchestrator: fetches, caches, maps onto canonical models."""
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -17,6 +18,7 @@ from models.canonical import (
 )
 from services import mappers
 from services.client import HostClient, UpstreamError
+from services.contributors import repository_contributors
 from services.history import HistoryService
 from services.registry import Target
 
@@ -226,9 +228,22 @@ class AnalyticsService:
         }
         return stats, extras
 
-    async def get_repos_section(self, username: str) -> Repos:
+    async def get_repos_section(self, username: str, *, extra_emails: set[str] | None = None) -> Repos:
         repos_raw = await self.get_repos(username)
-        return mappers.repos_from_list(repos_raw)
+        result = mappers.repos_from_list(repos_raw)
+        if not repos_raw:
+            return result
+        user = await self.get_user(username)
+        deadline = asyncio.get_running_loop().time() + settings.request_deadline_seconds
+
+        async def enrich(raw: dict, model):
+            model.contributors, model.contributors_complete = await repository_contributors(
+                self.client, self.target, raw, deadline, user=user,
+                extra_emails=set(extra_emails or []),
+            )
+
+        await asyncio.gather(*(enrich(raw, model) for raw, model in zip(repos_raw, result.repos)))
+        return result
 
     async def get_orgs_section(self, username: str) -> Orgs:
         try:
