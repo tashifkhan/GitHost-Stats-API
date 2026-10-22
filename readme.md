@@ -37,7 +37,12 @@ custom URLs), and `software` carries `{name, version}`.
 ## Deep history
 
 Every Gitea-family heatmap endpoint caps at ~371 days server-side. Pass
-`deep=true` to rebuild the full calendar from commit walks:
+`deep=true` to rebuild the full calendar from commit walks.
+
+The walk counts primary authors and `Co-authored-by: Name <email>` trailers.
+It matches the forge login, the user's public email, any `extra_emails` supplied
+to the history service, or an email whose local part equals the username. A
+commit counts once even when multiple authorship fields match the user.
 
 * a Redis manifest keyed by `repo.id` stores `{pushed_at, head_sha, oldest_sha,
   complete}` per repo

@@ -96,10 +96,14 @@ class AnalyticsService:
         use_deep = deep or (redis_enabled() and await self.history.available(username))
         if use_deep and redis_enabled():
             repos = await self.get_repos(username)
+            user = await self.get_user(username)
+            emails = set(extra_emails or [])
+            if user.get("email"):
+                emails.add(user["email"])
             walk_result = await self.history.refresh(
                 username,
                 repos=repos,
-                extra_emails=extra_emails,
+                extra_emails=emails,
             )
             ran_walk = True
 
