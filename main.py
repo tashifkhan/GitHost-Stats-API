@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from core.config import settings
 from core.middleware import CacheRateLimitMiddleware
+from core.runtime import RequestBudgetMiddleware
 from services.client import UpstreamError
 from services.registry import parse_instances
 
@@ -26,13 +27,16 @@ app = FastAPI(
 )
 
 
+# add_middleware wraps outward: the last one added runs first. CORS must be
+# outermost so the budget's 504 and the limiter's 429 still carry CORS headers.
+app.add_middleware(CacheRateLimitMiddleware, platform="githost")
+app.add_middleware(RequestBudgetMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(CacheRateLimitMiddleware, platform="githost")
 
 
 @app.exception_handler(UpstreamError)
