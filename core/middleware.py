@@ -115,6 +115,8 @@ class CacheRateLimitMiddleware(BaseHTTPMiddleware):
         if handle is None:
             return await call_next(request)
 
+        # A cache hit stays free: badges embedded in READMEs arrive from a small
+        # pool of shared proxy addresses.
         key = _cache_key(self.platform, request)
         cached = await get_json(key)
         if cached is not None:
